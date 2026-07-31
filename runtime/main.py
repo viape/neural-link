@@ -1,6 +1,11 @@
 """O processo do Runtime — um dispositivo inteiro, residente.
 
-    python -m neural_link.runtime.main --config /etc/neural-link/config.toml
+    python -m neural_link.runtime.main
+
+Carrega sempre /etc/neural-link/config.toml por omissão (o caminho
+oficial — ver CAMINHO_CONFIG_OFICIAL); `--config outro/caminho.toml`
+continua a existir para testes/casos excecionais. Sem o ficheiro no
+caminho oficial, arranca à mesma nas omissões de `configuration.py`.
 
 Mesmo idioma de sinal/loop de `neural_runtime/cloud/tenant/entrypoint.py`:
 um handler de sinal só marca uma flag (`DeviceStateMachine.
@@ -24,10 +29,17 @@ log = logging.getLogger("neural_link.runtime")
 
 _INTERVALO_LOOP_S = 0.5
 
+# O único caminho oficial de configuração — o systemd real (ver
+# `service.py::unit_file_content`) invoca `main.py` sem argumentos, por
+# isso é este o caminho que o Runtime tem de tentar por omissão. `load()`
+# (configuration.py, inalterado) já trata ficheiro em falta/corrompido
+# caindo nas omissões — este caminho só lhe diz ONDE procurar primeiro.
+CAMINHO_CONFIG_OFICIAL = "/etc/neural-link/config.toml"
+
 
 def _analisar_argumentos(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Neural Link Runtime")
-    parser.add_argument("--config", default=None)
+    parser.add_argument("--config", default=CAMINHO_CONFIG_OFICIAL)
     parser.add_argument("--version", default="0.1.0")
     return parser.parse_args(argv)
 
