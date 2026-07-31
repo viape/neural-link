@@ -1,0 +1,22 @@
+[project]
+name = "neural-link"
+version = "0.1.0"
+description = "A ponte entre um dispositivo físico (Raspberry Pi, hoje) e a Neural Cloud — nunca conhece Brain, Memory, Planning nem qualquer módulo Cloud."
+requires-python = ">=3.10"
+dependencies = [
+    "neural-audio @ git+https://github.com/viape/neural-audio.git",
+]
+
+[project.optional-dependencies]
+mic = ["neural-audio[mic]"]
+dev = ["pytest>=7"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["neural_link"]
+
+[tool.setuptools.package-dir]
+neural_link = "."
