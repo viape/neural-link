@@ -43,6 +43,17 @@ class _AudioPipelineNulo:
         pass
 
 
+class _AudioPipelineComDormir:
+    def __init__(self) -> None:
+        self.adormeceu = False
+
+    def poll(self) -> None:
+        pass
+
+    def dormir(self) -> None:
+        self.adormeceu = True
+
+
 def _componentes_ja_desligados() -> DeviceRuntimeComponents:
     sm = DeviceStateMachine(initial=estados.BOOTING)
     sm.shutdown_requested = True  # o loop principal não chega a correr
@@ -144,6 +155,7 @@ class _HeartbeatNuncaDevido:
 
 def _componentes_com_comando_pendente(
     resposta: dict, *, speaker: _SpeakerFalso | None = None,
+    audio_pipeline=None,
 ) -> tuple[DeviceRuntimeComponents, DeviceStateMachine, _ConexaoComComando]:
     sm = DeviceStateMachine(initial=estados.BOOTING)
     conexao = _ConexaoComComando(resposta)
@@ -156,7 +168,7 @@ def _componentes_com_comando_pendente(
         drivers=DriverSet(audio=_AudioNula(), network=None, storage=None,
                            led=NullLEDDriver(), button=NullButtonDriver(),
                            speaker=speaker),
-        audio_pipeline=_AudioPipelineNulo(),
+        audio_pipeline=audio_pipeline or _AudioPipelineNulo(),
     )
     return componentes, sm, conexao
 
@@ -208,6 +220,28 @@ def test_main_despacha_speak_toca_no_driver_de_som_e_devolve_ok(tmp_path, monkey
 
     assert codigo == 0
     assert speaker.tocados == [b"RIFFxxxxWAVEfake"]
+    assert conexao.enviados[1]["status"] == "ok"
+
+
+def test_main_despacha_sleep_para_a_pipeline_de_audio(tmp_path, monkeypatch):
+    pipeline = _AudioPipelineComDormir()
+    componentes, sm, conexao = _componentes_com_comando_pendente(
+        {"type": "Sleep", "correlation_id": "c-4"}, audio_pipeline=pipeline,
+    )
+
+    def _boot_falso(config, *, version, wake_word=None):
+        return componentes
+
+    def _parar_apos_uma_iteracao(*_a, **_k):
+        sm.shutdown_requested = True
+
+    monkeypatch.setattr(main_module, "boot", _boot_falso)
+    monkeypatch.setattr(main_module.time, "sleep", _parar_apos_uma_iteracao)
+
+    codigo = main_module.main(["--config", str(tmp_path / "nao_existe.toml")])
+
+    assert codigo == 0
+    assert pipeline.adormeceu is True
     assert conexao.enviados[1]["status"] == "ok"
 
 
@@ -332,6 +366,33 @@ def test_main_cai_no_null_quando_openwakeword_falha(tmp_path, monkeypatch):
 
     def _open_wake_word_que_falha(*, model, threshold):
         raise RuntimeError("openwakeword não está instalado")
+
+    monkeypatch.setattr(main_module, "OpenWakeWord", _open_wake_word_que_falha)
+
+    capturado = {}
+
+    def _boot_falso(config, *, version, wake_word=None):
+        capturado["wake_word"] = wake_word
+        return _componentes_ja_desligados()
+
+    monkeypatch.setattr(main_module, "boot", _boot_falso)
+
+    main_module.main(["--config", str(tmp_path / "nao_existe.toml")])
+
+    assert capturado["wake_word"] is not None
+    assert isinstance(capturado["wake_word"], NullWakeWordProvider)
+
+
+def test_main_cai_no_null_quando_modelo_onnx_esta_em_falta(tmp_path, monkeypatch):
+    """Guarda de regressão para um bug real, apanhado ao validar contra o
+    openwakeword a sério: com o pacote instalado mas os modelos ONNX por
+    descarregar, `Model()` levanta `onnxruntime...NoSuchFile` — que NÃO
+    é uma RuntimeError. Um `except RuntimeError` sozinho deixava isto
+    escapar e crashava o dispositivo inteiro no arranque."""
+    from neural_link.audio.pipeline import NullWakeWordProvider
+
+    def _open_wake_word_que_falha(*, model, threshold):
+        raise OSError("modelo ONNX em falta — correr download_models() primeiro")
 
     monkeypatch.setattr(main_module, "OpenWakeWord", _open_wake_word_que_falha)
 

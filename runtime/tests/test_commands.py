@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from neural_link.runtime.commands import (COMANDOS_AUDIO, COMANDOS_CONHECIDOS,
                                            OTA_AVAILABLE, PLAY_AUDIO, REBOOT,
-                                           SPEAK, STOP_AUDIO, handle_command)
+                                           SLEEP, SPEAK, STOP_AUDIO,
+                                           handle_command)
 
 
 def _handle(tipo, **payload):
@@ -27,7 +28,7 @@ def test_get_status_devolve_o_estado_atual():
 
 
 def test_comandos_placeholder_nunca_tocam_hardware_devolvem_not_implemented():
-    for comando in ("PlayAudio", "StopAudio", "Speak", "Reboot", "OTAAvailable"):
+    for comando in ("PlayAudio", "StopAudio", "Speak", "Sleep", "Reboot", "OTAAvailable"):
         _, resultado = _handle(comando)
         assert resultado["status"] == "not_implemented", comando
 
@@ -50,7 +51,8 @@ def test_comando_desconhecido_nunca_levanta():
 
 def test_todos_os_comandos_do_pedido_estao_cobertos():
     assert set(COMANDOS_CONHECIDOS) == {
-        "PlayAudio", "StopAudio", "Speak", "Reboot", "OTAAvailable", "Ping", "GetStatus",
+        "PlayAudio", "StopAudio", "Speak", "Sleep", "Reboot", "OTAAvailable",
+        "Ping", "GetStatus",
     }
 
 
@@ -82,6 +84,31 @@ def test_audio_result_e_devolvido_tal_e_qual_para_comandos_de_audio():
             "token": "segredo", "correlation_id": "c-1",
             "status": "error", "reason": "sem altifalante",
         }, comando
+
+
+def test_sleep_result_omisso_mantem_not_implemented():
+    _, resultado = _handle(SLEEP)
+    assert resultado["status"] == "not_implemented"
+
+
+def test_sleep_result_e_devolvido_tal_e_qual():
+    _, resultado = handle_command(
+        SLEEP, {}, correlation_id="c-1", device_id="pi-01", tenant="empresa_a",
+        token="segredo", state_provider=lambda: "ONLINE",
+        sleep_result={"status": "ok"},
+    )
+    assert resultado["status"] == "ok"
+
+
+def test_sleep_ignora_audio_result():
+    """Sleep nunca está em COMANDOS_AUDIO — só sleep_result o afeta."""
+    assert SLEEP not in COMANDOS_AUDIO
+    _, resultado = handle_command(
+        SLEEP, {}, correlation_id="c-1", device_id="pi-01", tenant="empresa_a",
+        token="segredo", state_provider=lambda: "ONLINE",
+        audio_result={"status": "ok"},
+    )
+    assert resultado["status"] == "not_implemented"
 
 
 def test_reboot_e_ota_ignoram_audio_result():

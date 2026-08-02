@@ -27,7 +27,7 @@ from ..audio.pipeline import NullWakeWordProvider
 from . import device_state as estados
 from .boot import boot
 from .commands import (COMANDOS_AUDIO, COMANDOS_CONHECIDOS, PLAY_AUDIO,
-                        SPEAK, STOP_AUDIO, handle_command)
+                        SLEEP, SPEAK, STOP_AUDIO, handle_command)
 from .configuration import DeviceConfig
 from .configuration import load as load_config
 from .offline_queue import COMMANDS, TELEMETRY
@@ -69,6 +69,19 @@ def _parar_audio(speaker) -> dict:
         return {"status": "error", "reason": "no_speaker"}
     speaker.stop()
     return {"status": "ok"}
+
+
+def _dormir(audio_pipeline) -> dict:
+    """O único sítio que toca na pipeline para sair do modo de
+    conversa — `handle_command` continua pura, mesmo padrão de
+    `_tocar_audio`/`_parar_audio`. Nunca falha (é só estado em
+    memória), mas mantém a mesma honestidade dos outros: nunca finge
+    sucesso sem tentar."""
+    try:
+        audio_pipeline.dormir()
+        return {"status": "ok"}
+    except Exception as exc:                       # noqa: BLE001
+        return {"status": "error", "reason": str(exc)}
 
 
 def _construir_wake_word(config: DeviceConfig) -> WakeWordProvider:
@@ -130,15 +143,19 @@ def main(argv: list[str] | None = None) -> int:
                 tipo = resposta.get("type")
                 if tipo in COMANDOS_CONHECIDOS:
                     audio_result = None
+                    sleep_result = None
                     if tipo in (PLAY_AUDIO, SPEAK):
                         audio_result = _tocar_audio(
                             componentes.drivers.speaker, resposta.get("audio_b64", ""))
                     elif tipo == STOP_AUDIO:
                         audio_result = _parar_audio(componentes.drivers.speaker)
+                    elif tipo == SLEEP:
+                        sleep_result = _dormir(componentes.audio_pipeline)
                     ack, resultado = handle_command(
                         tipo, resposta, correlation_id=resposta.get("correlation_id", ""),
                         device_id=config.device_id, tenant=config.tenant, token=config.token,
                         state_provider=lambda: sm.state, audio_result=audio_result,
+                        sleep_result=sleep_result,
                     )
                     if not componentes.connection.send(ack):
                         componentes.offline_queue.enqueue(COMMANDS, ack)
