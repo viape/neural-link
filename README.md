@@ -52,6 +52,67 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now neural-link
 ```
 
+## Auriculares Bluetooth (A2DP)
+
+O emparelhamento em si é um passo do SO (`bluetoothctl`), fora deste
+código — mas numa instalação nova, `bluetoothctl connect` falha quase
+sempre com `br-connection-profile-unavailable`, por duas razões que não
+têm nada a ver com o dispositivo Bluetooth em si:
+
+**1. O WirePlumber nunca liga o Bluetooth numa sessão sem ecrã.**
+`monitors/bluez.lua` só cria o monitor Bluetooth quando o *seat* da
+sessão está `"active"` (sessão gráfica/consola em primeiro plano) — uma
+sessão `systemd --user` criada por SSH fica para sempre em `"online"`,
+nunca `"active"`, e o script fica parado à espera, em silêncio, sem
+nenhum erro nos logs. `wpctl status` nunca mostra nada em "Bluetooth", e
+`bluetoothctl show` nunca lista os UUIDs de A2DP no adaptador. Corrigir
+com um override local (não mexe no `main-embedded`, que também desliga
+o *state.restore* do pairing — não queremos perder isso):
+
+```bash
+mkdir -p ~/.config/wireplumber/wireplumber.conf.d
+cat > ~/.config/wireplumber/wireplumber.conf.d/99-bluez-sem-seat.conf << 'EOF'
+wireplumber.profiles = {
+  main = {
+    monitor.bluez.seat-monitoring = disabled
+  }
+}
+EOF
+systemctl --user restart wireplumber
+```
+
+Confirmar que resolveu: `bluetoothctl show | grep -i uuid` deve passar
+a listar `Audio Source (0000110a)` e `Audio Sink (0000110b)`.
+
+**2. `sounddevice`/PortAudio nunca chega ao PipeWire sem `pipewire-alsa`.**
+Sem este pacote, o dispositivo ALSA `default` (o que `SpeakerPlayback`/
+`RaspberryPiSpeakerDriver` usam por omissão) vai direto ao hardware de
+áudio físico do Pi — mesmo com os auriculares já ligados como sink por
+omissão do PipeWire, nada sai por eles, porque o código nunca fala com
+o PipeWire.
+
+```bash
+sudo apt install pipewire-alsa
+```
+
+Confirmar: `python3 -c "import sounddevice as sd; print(sd.query_devices())"`
+deve listar um dispositivo `pipewire` com dezenas de canais (`64 in, 64
+out`, tipicamente) — se só aparecerem `bcm2835 Headphones`/`sysdefault`/
+`dmix`, o plugin ainda não está a ser usado.
+
+Só depois destes dois passos é que `bluetoothctl pair`/`trust`/`connect`
+tem alguma hipótese de funcionar. Se mesmo assim `connect` devolver
+`br-connection-refused` (diferente de `br-connection-profile-unavailable`
+— já é sinal de que o perfil A2DP existe), o problema passou a ser o
+pairing em si, não a configuração: `bluetoothctl remove <MAC>` seguido de
+`pair`/`trust`/`connect` outra vez, com os auriculares em modo de
+emparelhamento, normalmente resolve.
+
+Nenhum destes dois passos faz parte deste repositório nem do
+`requirements.txt` — são configuração do sistema operativo do Pi, por
+isso um `git pull` nunca os traz de volta. Precisam de ser repetidos em
+qualquer dispositivo novo.
+
 ## Estrutura
 
 ```
