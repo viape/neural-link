@@ -69,7 +69,7 @@ def test_ficheiro_inexistente_mantem_o_comportamento_atual_de_omissoes(
 ):
     capturado = {}
 
-    def _boot_falso(config, *, version):
+    def _boot_falso(config, *, version, wake_word=None):
         capturado["config"] = config
         return _componentes_ja_desligados()
 
@@ -97,7 +97,7 @@ def test_ficheiro_existente_e_carregado_e_chega_ao_boot(tmp_path, monkeypatch):
 
     capturado = {}
 
-    def _boot_falso(config, *, version):
+    def _boot_falso(config, *, version, wake_word=None):
         capturado["config"] = config
         return _componentes_ja_desligados()
 
@@ -165,7 +165,7 @@ def test_main_despacha_comando_conhecido_envia_ack_depois_result(tmp_path, monke
     componentes, sm, conexao = _componentes_com_comando_pendente(
         {"type": "Ping", "correlation_id": "c-1"})
 
-    def _boot_falso(config, *, version):
+    def _boot_falso(config, *, version, wake_word=None):
         return componentes
 
     def _parar_apos_uma_iteracao(*_a, **_k):
@@ -195,7 +195,7 @@ def test_main_despacha_speak_toca_no_driver_de_som_e_devolve_ok(tmp_path, monkey
         speaker=speaker,
     )
 
-    def _boot_falso(config, *, version):
+    def _boot_falso(config, *, version, wake_word=None):
         return componentes
 
     def _parar_apos_uma_iteracao(*_a, **_k):
@@ -217,7 +217,7 @@ def test_main_despacha_stop_audio_para_o_driver(tmp_path, monkeypatch):
         {"type": "StopAudio", "correlation_id": "c-3"}, speaker=speaker,
     )
 
-    def _boot_falso(config, *, version):
+    def _boot_falso(config, *, version, wake_word=None):
         return componentes
 
     def _parar_apos_uma_iteracao(*_a, **_k):
@@ -238,7 +238,7 @@ def test_main_speak_sem_driver_devolve_erro_honesto(tmp_path, monkeypatch):
     componentes, sm, conexao = _componentes_com_comando_pendente(
         {"type": "Speak", "correlation_id": "c-4", "audio_b64": "abc"})
 
-    def _boot_falso(config, *, version):
+    def _boot_falso(config, *, version, wake_word=None):
         return componentes
 
     def _parar_apos_uma_iteracao(*_a, **_k):
@@ -258,7 +258,7 @@ def test_main_mensagem_sem_type_conhecido_cai_no_log_antigo(tmp_path, monkeypatc
     idêntico ao de antes da Fase B."""
     componentes, sm, conexao = _componentes_com_comando_pendente({"ok": True})
 
-    def _boot_falso(config, *, version):
+    def _boot_falso(config, *, version, wake_word=None):
         return componentes
 
     def _parar_apos_uma_iteracao(*_a, **_k):
@@ -292,7 +292,7 @@ def test_runtime_usa_a_mesma_instancia_devolvida_por_load_config(
 
     capturado = {}
 
-    def _boot_falso(config, *, version):
+    def _boot_falso(config, *, version, wake_word=None):
         capturado["config"] = config
         return _componentes_ja_desligados()
 
@@ -324,6 +324,54 @@ class _SpeakerQueRebentaAoArrancar:
         pass
 
 
+def test_main_cai_no_null_quando_openwakeword_falha(tmp_path, monkeypatch):
+    """Independente de `openwakeword` estar instalado nesta máquina —
+    força a falha explicitamente, para o teste não depender do ambiente:
+    tem de cair no `NullWakeWordProvider`, nunca `None`, nunca rebentar."""
+    from neural_link.audio.pipeline import NullWakeWordProvider
+
+    def _open_wake_word_que_falha(*, model, threshold):
+        raise RuntimeError("openwakeword não está instalado")
+
+    monkeypatch.setattr(main_module, "OpenWakeWord", _open_wake_word_que_falha)
+
+    capturado = {}
+
+    def _boot_falso(config, *, version, wake_word=None):
+        capturado["wake_word"] = wake_word
+        return _componentes_ja_desligados()
+
+    monkeypatch.setattr(main_module, "boot", _boot_falso)
+
+    main_module.main(["--config", str(tmp_path / "nao_existe.toml")])
+
+    assert capturado["wake_word"] is not None
+    assert isinstance(capturado["wake_word"], NullWakeWordProvider)
+
+
+def test_main_usa_o_modelo_e_threshold_configurados(tmp_path, monkeypatch):
+    """`_construir_wake_word` tenta mesmo o `OpenWakeWord` com os valores
+    do config.toml antes de cair no fallback — prova-se monkeypatchando
+    `OpenWakeWord` por um duplo que só regista o que recebeu."""
+    capturado = {}
+
+    class _OpenWakeWordFalso:
+        def __init__(self, *, model, threshold):
+            capturado["model"] = model
+            capturado["threshold"] = threshold
+
+    monkeypatch.setattr(main_module, "OpenWakeWord", _OpenWakeWordFalso)
+
+    caminho = tmp_path / "config.toml"
+    caminho.write_text("[wake_word]\nmodel = \"alexa\"\nthreshold = 0.8\n")
+    config = main_module.load_config(caminho)
+
+    wake = main_module._construir_wake_word(config)
+
+    assert capturado == {"model": "alexa", "threshold": 0.8}
+    assert isinstance(wake, _OpenWakeWordFalso)
+
+
 def test_microfone_ou_altifalante_ausente_nunca_impede_o_arranque(tmp_path, monkeypatch, caplog):
     """Guarda de regressão: hardware de áudio em falta tem de degradar
     (log + continuar), nunca travar o dispositivo inteiro — a mesma
@@ -344,7 +392,7 @@ def test_microfone_ou_altifalante_ausente_nunca_impede_o_arranque(tmp_path, monk
         audio_pipeline=_AudioPipelineNulo(),
     )
 
-    def _boot_falso(config, *, version):
+    def _boot_falso(config, *, version, wake_word=None):
         return componentes
 
     monkeypatch.setattr(main_module, "boot", _boot_falso)

@@ -9,6 +9,7 @@ dependencies = [
 
 [project.optional-dependencies]
 mic = ["neural-audio[mic]"]
+wake = ["neural-audio[wake]"]
 dev = ["pytest>=7"]
 
 [build-system]

@@ -1,9 +1,10 @@
-# O próprio neural_link, em modo editável, com o extra [mic] — que traz
-# neural_audio (ver `dependencies`/`[project.optional-dependencies]` em
-# pyproject.toml) já com suporte a microfone (sounddevice). Resolve o
+# O próprio neural_link, em modo editável, com os extras [mic,wake] —
+# que trazem neural_audio (ver `dependencies`/`[project.optional-
+# dependencies]` em pyproject.toml) já com suporte a microfone
+# (sounddevice) e a deteção de wake word real (openwakeword). Resolve o
 # neural_audio a partir do seu próprio repositório Git (privado —
 # requer credenciais configuradas na máquina que faz o clone/install).
--e .[mic]
+-e .[mic,wake]
 
 # Sem dependências de terceiros além desta — o resto do Neural Link
 # (WebSocket, buffer offline, máquina de estados, HAL) é stdlib puro.

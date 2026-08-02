@@ -51,3 +51,27 @@ def test_secoes_em_falta_mantem_omissoes(tmp_path):
     cfg = load(caminho)
     assert cfg.hostname == "so-isto"
     assert cfg.gateway_port == DeviceConfig().gateway_port
+    assert cfg.wake_word_model == DeviceConfig().wake_word_model
+    assert cfg.wake_word_threshold == DeviceConfig().wake_word_threshold
+
+
+def test_wake_word_e_lido(tmp_path):
+    caminho = tmp_path / "config.toml"
+    caminho.write_text(
+        "[wake_word]\n"
+        'model = "alexa"\n'
+        "threshold = 0.7\n"
+    )
+    cfg = load(caminho)
+    assert cfg.wake_word_model == "alexa"
+    assert cfg.wake_word_threshold == 0.7
+
+
+def test_wake_word_threshold_invalido_mantem_omissao(tmp_path):
+    caminho = tmp_path / "config.toml"
+    caminho.write_text(
+        "[wake_word]\n"
+        'threshold = "nao-e-numero"\n'
+    )
+    cfg = load(caminho)
+    assert cfg.wake_word_threshold == DeviceConfig().wake_word_threshold

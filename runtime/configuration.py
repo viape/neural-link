@@ -28,6 +28,11 @@ class DeviceConfig:
     ota_channel: str = "stable"
     heartbeat_interval_s: float = 30.0
     token: str = ""
+    # OpenWakeWord só tem modelos pré-treinados em inglês — "hey_jarvis" é
+    # o mais neutro dos disponíveis. Configurável para quando existir um
+    # modelo próprio, sem precisar de tocar em código.
+    wake_word_model: str = "hey_jarvis"
+    wake_word_threshold: float = 0.5
     source: str = "(defaults)"
 
 
@@ -84,5 +89,16 @@ def load(path: str | Path | None = None) -> DeviceConfig:
         except (TypeError, ValueError):
             log.warning("heartbeat.interval_s inválido — a manter %.1fs",
                         cfg.heartbeat_interval_s)
+
+    wake_word = dados.get("wake_word") or {}
+    if isinstance(wake_word, dict):
+        cfg.wake_word_model = str(wake_word.get("model", cfg.wake_word_model))
+        try:
+            cfg.wake_word_threshold = float(
+                wake_word.get("threshold", cfg.wake_word_threshold)
+            )
+        except (TypeError, ValueError):
+            log.warning("wake_word.threshold inválido — a manter %.2f",
+                        cfg.wake_word_threshold)
 
     return cfg

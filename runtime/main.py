@@ -21,10 +21,14 @@ import logging
 import sys
 import time
 
+from neural_audio import OpenWakeWord, WakeWordProvider
+
+from ..audio.pipeline import NullWakeWordProvider
 from . import device_state as estados
 from .boot import boot
 from .commands import (COMANDOS_AUDIO, COMANDOS_CONHECIDOS, PLAY_AUDIO,
                         SPEAK, STOP_AUDIO, handle_command)
+from .configuration import DeviceConfig
 from .configuration import load as load_config
 from .offline_queue import COMMANDS, TELEMETRY
 
@@ -67,12 +71,30 @@ def _parar_audio(speaker) -> dict:
     return {"status": "ok"}
 
 
+def _construir_wake_word(config: DeviceConfig) -> WakeWordProvider:
+    """`openwakeword` em falta (ou a carregar o modelo ONNX a falhar)
+    nunca pode impedir o dispositivo de arrancar — mesma honestidade do
+    microfone/altifalante: fica registado, o dispositivo cai de volta ao
+    `NullWakeWordProvider` (nunca ouve, mas também nunca crasha)."""
+    try:
+        return OpenWakeWord(model=config.wake_word_model,
+                             threshold=config.wake_word_threshold)
+    except Exception as exc:                            # noqa: BLE001
+        # Nunca só RuntimeError: modelo ONNX em falta (esqueceram o
+        # download_models() de instalação) levanta onnxruntime.
+        # NoSuchFile, não RuntimeError — apanhado ao validar a sério,
+        # não hipotético.
+        log.warning("wake word indisponível — o dispositivo nunca vai começar "
+                    "a gravar sozinho (%s)", exc)
+        return NullWakeWordProvider()
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO)
     args = _analisar_argumentos(argv if argv is not None else sys.argv[1:])
 
     config = load_config(args.config)
-    componentes = boot(config, version=args.version)
+    componentes = boot(config, version=args.version, wake_word=_construir_wake_word(config))
     sm = componentes.state_machine
     sm.install_signal_handlers()
 

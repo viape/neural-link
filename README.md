@@ -25,19 +25,31 @@ pip install -r requirements.txt
 ```
 
 `requirements.txt` instala o próprio `neural_link` em modo editável, com
-o extra `[mic]` — que traz `neural-audio` (de `github.com/viape/
+os extras `[mic,wake]` — que trazem `neural-audio` (de `github.com/viape/
 neural-audio`, repositório próprio, privado) já com suporte a microfone
-(`sounddevice`). Necessário para `python -m neural_link.runtime.main`
-funcionar independentemente do nome da pasta onde o repositório foi
-clonado.
+(`sounddevice`) e a deteção de wake word real (`openwakeword`).
+Necessário para `python -m neural_link.runtime.main` funcionar
+independentemente do nome da pasta onde o repositório foi clonado.
 
 Os dois repositórios são **privados** — a máquina que faz o clone/
 install precisa de credenciais Git configuradas (chave SSH ou token com
 acesso a `viape/neural-link` e `viape/neural-audio`), tal como qualquer
 outro `pip install` a partir de um repositório privado do GitHub.
 
+`openwakeword` precisa dos modelos ONNX descarregados uma vez (não vêm
+no pacote):
+```bash
+python3 -c "import openwakeword.utils as u; u.download_models(model_names=['hey_jarvis'])"
+```
+Sem isto (ou sem `[wake]` instalado), o dispositivo arranca à mesma —
+cai no `NullWakeWordProvider` (nunca ouve, mas nunca crasha) e regista
+um aviso claro no log. Só modelos em inglês existem pré-treinados
+(`hey_jarvis`, `alexa`, `hey_mycroft`, ...); sem modelo português, é a
+limitação honesta desta v1.
+
 Configurar (`config.toml`, ver `neural_link/runtime/configuration.py` para
-todos os campos): `hostname`, `[gateway] host/port`, `tenant`, `device_id`.
+todos os campos): `hostname`, `[gateway] host/port`, `tenant`, `device_id`,
+`[wake_word] model/threshold` (omissão: `"hey_jarvis"` / `0.5`).
 
 Correr manualmente:
 ```bash
