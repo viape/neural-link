@@ -63,12 +63,25 @@ class LinkAudioPipeline:
         return self._a_ouvir
 
     def poll(self) -> None:
-        """Uma sondagem. Chamar em loop (mesmo idioma de `Transport.
-        receive()`/`Gateway.receive()` — nunca bloqueia)."""
-        chunk = self._mic.read()
-        if chunk is None:
-            return
+        """Uma sondagem — nunca bloqueia. Esvazia TUDO o que o microfone
+        já tiver disponível, não só um bocado.
 
+        BUG REAL, apanhado com hardware a sério: quem chama isto (o loop
+        principal do Runtime) só o faz a cada ~500ms, mas o microfone
+        produz um bocado novo a cada 80ms (`chunk_ms`). Ler só um bocado
+        por chamada consumia áudio a 1/6 da velocidade a que era
+        produzido — a fila do `Microphone` enchia-se e começava a
+        descartar o mais antigo (ver `Microphone.read()`), e a wake
+        word nunca via os bocados a tempo de reconhecer a frase
+        inteira. Esvaziar tudo aqui corrige isso sem mexer no ritmo do
+        loop principal."""
+        while True:
+            chunk = self._mic.read()
+            if chunk is None:
+                return
+            self._processar_bocado(chunk)
+
+    def _processar_bocado(self, chunk: AudioChunk) -> None:
         if not self._a_ouvir:
             self._preroll.append(chunk)
             if self._wake.detect(chunk):

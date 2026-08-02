@@ -89,3 +89,46 @@ def test_poll_sem_audio_nao_rebenta():
     )
     pipeline.poll()  # mic.read() -> None
     assert pipeline.listening is False
+
+
+def test_poll_esvazia_varios_bocados_de_uma_so_vez():
+    """Guarda de regressão para um bug real: o loop principal do Runtime
+    só chama poll() a cada ~500ms, mas o microfone produz um bocado
+    novo a cada 80ms — um poll() que só lesse UM bocado ficava sempre
+    ~6x atrasado em relação ao que realmente se estava a dizer, e a
+    wake word nunca via os bocados a tempo. Um único poll() tem de
+    processar TUDO o que já estiver na fila, não só o mais antigo."""
+    mic = QueuedAudioSource()
+    pipeline = LinkAudioPipeline(
+        mic, SimulatedWakeWord(phrase="robo"), AdaptiveEnergyVAD(),
+        on_utterance=lambda _a: None, silence_chunks=3,
+    )
+    # 6 bocados empilhados ANTES de qualquer poll() — simula o microfone
+    # a produzir mais depressa do que o loop principal consome.
+    mic.push(_chunk("robo"))
+    for _ in range(5):
+        mic.push(_chunk("ola tudo bem"))
+
+    pipeline.poll()  # UMA só chamada
+
+    # se só tivesse lido um bocado, a wake word nunca teria sido detetada
+    # a tempo de os restantes 5 bocados contarem para o buffer da frase.
+    assert pipeline.listening is True
+
+
+def test_poll_processa_ate_finalizar_a_frase_dentro_de_uma_so_chamada():
+    mic = QueuedAudioSource()
+    capturas: list[bytes] = []
+    pipeline = LinkAudioPipeline(
+        mic, SimulatedWakeWord(phrase="robo"), AdaptiveEnergyVAD(),
+        on_utterance=capturas.append, silence_chunks=2,
+    )
+    mic.push(_chunk("robo"))
+    mic.push(_chunk("ola"))
+    mic.push(_silencio())
+    mic.push(_silencio())
+
+    pipeline.poll()  # tudo isto tem de ser processado numa só chamada
+
+    assert pipeline.listening is False
+    assert len(capturas) == 1
