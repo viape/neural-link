@@ -43,7 +43,12 @@ class LinkAudioPipeline:
         *,
         on_utterance: Callable[[bytes], None],
         preroll_chunks: int = 15,
-        silence_chunks: int = 15,
+        # 15 (1.2s) cortava a frase mal a pessoa fizesse uma pausa
+        # natural logo a seguir à wake word ("hey jarvis... [respira]...
+        # que horas são?") — a gravação terminava vazia, antes de a
+        # pergunta a sério começar. 25 (2.0s) dá essa margem, mesma
+        # ordem de grandeza do que assistentes de voz comuns usam.
+        silence_chunks: int = 25,
         max_chunks: int = 300,
     ) -> None:
         self._mic = mic
@@ -86,7 +91,14 @@ class LinkAudioPipeline:
             self._preroll.append(chunk)
             if self._wake.detect(chunk):
                 self._a_ouvir = True
-                self._buffer = list(self._preroll)
+                # NUNCA `list(self._preroll)` — os bocados no preroll são
+                # exatamente os que contêm a própria wake word ("hey
+                # jarvis" a ser dita). Incluí-los aqui mandava a wake
+                # word para o STT como se fosse parte do pedido — bug
+                # real, apanhado a testar com hardware a sério (o
+                # Whisper transcrevia "hey jarvis" como texto solto, e a
+                # LLM tentava interpretá-lo como parte da pergunta).
+                self._buffer = []
                 self._silencio_seguido = 0
             return
 
