@@ -79,10 +79,21 @@ def main(argv: list[str] | None = None) -> int:
     # Só aqui, não em boot() — arrancar o microfone a sério (placa real)
     # é um passo de "ir a produção", simétrico ao .stop() do finally.
     # Nem todo `AudioDriver` injetado nos testes implementa start().
+    #
+    # Hardware de áudio ausente (ex.: PortAudio não instalado no SO)
+    # nunca pode impedir o resto do dispositivo de arrancar — mesma
+    # honestidade de `_ler_temperatura_c`/`_ler_cpu_percent` em
+    # heartbeat.py: a ausência fica registada, nunca rebenta o processo.
     if hasattr(componentes.drivers.audio, "start"):
-        componentes.drivers.audio.start()
+        try:
+            componentes.drivers.audio.start()
+        except Exception as exc:                   # noqa: BLE001
+            log.warning("microfone indisponível — a arrancar sem áudio de entrada (%s)", exc)
     if componentes.drivers.speaker is not None and hasattr(componentes.drivers.speaker, "start"):
-        componentes.drivers.speaker.start()
+        try:
+            componentes.drivers.speaker.start()
+        except Exception as exc:                   # noqa: BLE001
+            log.warning("altifalante indisponível — a arrancar sem áudio de saída (%s)", exc)
 
     log.info("neural-link a arrancar — device_id=%s tenant=%s",
               config.device_id, config.tenant)

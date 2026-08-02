@@ -302,3 +302,56 @@ def test_runtime_usa_a_mesma_instancia_devolvida_por_load_config(
     main_module.main(["--config", str(caminho)])
 
     assert capturado["config"] is devolvida["cfg"]
+
+
+class _AudioQueRebentaAoArrancar:
+    """Simula hardware ausente (ex.: PortAudio não instalado no SO) —
+    `start()` levanta, tal como `neural_audio.Microphone` faz de
+    verdade nesse caso."""
+
+    def start(self) -> None:
+        raise RuntimeError("PortAudio library not found")
+
+    def stop(self) -> None:
+        pass
+
+
+class _SpeakerQueRebentaAoArrancar:
+    def start(self) -> None:
+        raise RuntimeError("PortAudio library not found")
+
+    def stop(self) -> None:
+        pass
+
+
+def test_microfone_ou_altifalante_ausente_nunca_impede_o_arranque(tmp_path, monkeypatch, caplog):
+    """Guarda de regressão: hardware de áudio em falta tem de degradar
+    (log + continuar), nunca travar o dispositivo inteiro — a mesma
+    honestidade que já vale para temperatura/CPU ausentes."""
+    sm = DeviceStateMachine(initial=estados.BOOTING)
+    sm.shutdown_requested = True
+    componentes = DeviceRuntimeComponents(
+        state_machine=sm,
+        connection=_ConexaoNula(),
+        offline_queue=None,
+        heartbeat=None,
+        device_manager=None,
+        drivers=DriverSet(
+            audio=_AudioQueRebentaAoArrancar(), network=None, storage=None,
+            led=NullLEDDriver(), button=NullButtonDriver(),
+            speaker=_SpeakerQueRebentaAoArrancar(),
+        ),
+        audio_pipeline=_AudioPipelineNulo(),
+    )
+
+    def _boot_falso(config, *, version):
+        return componentes
+
+    monkeypatch.setattr(main_module, "boot", _boot_falso)
+
+    with caplog.at_level("WARNING"):
+        codigo = main_module.main(["--config", str(tmp_path / "nao_existe.toml")])
+
+    assert codigo == 0
+    assert "microfone indisponível" in caplog.text
+    assert "altifalante indisponível" in caplog.text
