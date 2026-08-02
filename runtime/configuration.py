@@ -27,6 +27,7 @@ class DeviceConfig:
     tls_key: str = ""
     ota_channel: str = "stable"
     heartbeat_interval_s: float = 30.0
+    token: str = ""
     source: str = "(defaults)"
 
 
@@ -69,6 +70,10 @@ def load(path: str | Path | None = None) -> DeviceConfig:
     ota = dados.get("ota") or {}
     if isinstance(ota, dict):
         cfg.ota_channel = str(ota.get("channel", cfg.ota_channel))
+
+    seguranca = dados.get("security") or {}
+    if isinstance(seguranca, dict):
+        cfg.token = str(seguranca.get("token", cfg.token))
 
     heartbeat = dados.get("heartbeat") or {}
     if isinstance(heartbeat, dict):

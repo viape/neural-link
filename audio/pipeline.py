@@ -23,6 +23,17 @@ from neural_audio import (AudioChunk, AudioSource, VoiceActivityDetector,
                            WakeWordProvider)
 
 
+class NullWakeWordProvider(WakeWordProvider):
+    """A omissão de `boot()` quando nenhum motor de wake word real está
+    configurado — nunca deteta nada. Um Raspberry sem palavra-chave
+    configurada arranca e grava o pipeline na mesma (limpo, testável),
+    mas nunca ouve; documentado, não escondido. `OpenWakeWord`/Porcupine
+    entram aqui no dia em que existir uma implementação real."""
+
+    def detect(self, chunk: AudioChunk) -> bool:
+        return False
+
+
 class LinkAudioPipeline:
     def __init__(
         self,

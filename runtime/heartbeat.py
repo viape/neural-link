@@ -9,6 +9,7 @@ desenvolvimento (macOS) — ausência devolve `None`, nunca rebenta."""
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Callable
@@ -26,6 +27,16 @@ def _ler_temperatura_c() -> float | None:
     try:
         return int(_CAMINHO_TEMPERATURA.read_text().strip()) / 1000.0
     except (OSError, ValueError):
+        return None
+
+
+def _ler_cpu_percent() -> float | None:
+    """Melhor-esforço via `os.getloadavg()` (stdlib, POSIX) — mesma
+    disciplina de `_ler_temperatura_c`: ausente/indisponível devolve
+    `None`, nunca rebenta."""
+    try:
+        return round(os.getloadavg()[0] * 100.0 / (os.cpu_count() or 1), 2)
+    except (AttributeError, OSError):
         return None
 
 
@@ -58,6 +69,9 @@ class HeartbeatManager:
         device_manager: DeviceManager | None = None,
         state_provider: Callable[[], str] = lambda: "UNKNOWN",
         clock: Callable[[], float] = time.time,
+        device_id: str = "",
+        tenant: str = "",
+        token_provider: Callable[[], str] | None = None,
     ) -> None:
         self._version = version
         self._interval_s = interval_s
@@ -66,6 +80,13 @@ class HeartbeatManager:
         self._device_manager = device_manager
         self._state_provider = state_provider
         self._clock = clock
+        self._device_id = device_id
+        self._tenant = tenant
+        # Lido a cada heartbeat, não guardado em claro na construção —
+        # o token pode vir de algo que ainda não existe no arranque (ex.:
+        # emparelhamento), e nunca fica exposto em __repr__/logs por
+        # acidente enquanto não for mesmo usado.
+        self._token_provider = token_provider
         self._inicio = clock()
         self._ultimo_batimento = 0.0
 
@@ -89,6 +110,10 @@ class HeartbeatManager:
             wifi_connected=self._network.is_connected() if self._network else None,
             ble_connected=self._algum_earbud_ligado(),
             state=self._state_provider(),
+            device_id=self._device_id,
+            tenant=self._tenant,
+            token=self._token_provider() if self._token_provider else "",
+            cpu_percent=_ler_cpu_percent(),
         )
 
     def _algum_earbud_ligado(self) -> bool | None:

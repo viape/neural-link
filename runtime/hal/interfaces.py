@@ -1,4 +1,4 @@
-"""A Hardware Abstraction Layer do Neural Link — 8 contratos, interfaces
+"""A Hardware Abstraction Layer do Neural Link — 9 contratos, interfaces
 separadas de implementações. Três já existiam (biblioteca do round
 anterior) e são só ALIASADOS aqui — nunca redefinidos:
 
@@ -6,8 +6,9 @@ anterior) e são só ALIASADOS aqui — nunca redefinidos:
     BluetoothDriver = neural_link.ble.BleAdapter
     PowerDriver     = neural_link.power.PowerProvider
 
-Os outros cinco são novos, sem equivalente anterior:
-    NetworkDriver, StorageDriver, LEDDriver, ButtonDriver, Updater
+Os outros seis são novos, sem equivalente anterior:
+    NetworkDriver, StorageDriver, LEDDriver, ButtonDriver, Updater,
+    SpeakerDriver
 
 `AudioDriver` vem de `neural_audio`, não de `neural_core` — o Neural Link
 nunca importa `neural_core` diretamente (ver `neural_link/tests/
@@ -75,3 +76,16 @@ class Updater(ABC):
 
     @abstractmethod
     def apply(self, path: str) -> None: ...
+
+
+class SpeakerDriver(ABC):
+    """Reproduzir uma resposta já sintetizada (WAV, vinda do Core via
+    `Speak`/`PlayAudio`) — genuinamente novo, sem equivalente anterior
+    (`AudioDriver` é só captura). `neural_link.audio.playback.
+    SpeakerPlayback` é a única implementação real."""
+
+    @abstractmethod
+    def play(self, wav_bytes: bytes) -> None: ...
+
+    @abstractmethod
+    def stop(self) -> None: ...

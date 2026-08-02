@@ -51,6 +51,17 @@ class LinkGateway:
             self.buffer.enqueue(mensagem)
             return False
 
+    def receive(self, *, timeout_s: float = 0.05) -> dict | None:
+        """Sondagem — `None` se não chegou nada dentro de `timeout_s` ou
+        se a ligação caiu (nunca levanta por causa de rede, mesmo idioma
+        de `forward()`)."""
+        if not self.connected:
+            return None
+        try:
+            return self._client.receive_json(timeout_s=timeout_s)
+        except WebSocketConnectionError:
+            return None
+
     def flush_buffer(self) -> int:
         """Escoa o `OfflineBuffer` assim que houver ligação. Devolve
         quantas mensagens saíram desta vez."""

@@ -52,6 +52,29 @@ def test_ordem_de_arranque():
         servidor.disconnect()
 
 
+def test_boot_envia_hello_uma_vez_apos_ligar():
+    servidor = WebSocketTransport(port=8182)
+    servidor.connect()
+    try:
+        import time
+        cfg = DeviceConfig(gateway_host="127.0.0.1", gateway_port=8182,
+                            device_id="pi-01", tenant="empresa_a", token="segredo")
+        boot(cfg, driver_factory=lambda c: _placa_simulada(c, []))
+        time.sleep(0.1)
+        mensagens = servidor.receive()
+        assert mensagens is not None
+        assert mensagens.payload["type"] == "hello"
+        assert mensagens.payload["device_id"] == "pi-01"
+        assert mensagens.payload["tenant"] == "empresa_a"
+        assert mensagens.payload["token"] == "segredo"
+        assert set(mensagens.payload["capabilities"]) == {
+            "heartbeat", "audio", "speaker", "camera", "avatar", "ota",
+        }
+        assert servidor.receive() is None  # só uma vez
+    finally:
+        servidor.disconnect()
+
+
 def test_boot_sem_gateway_fica_offline_mas_nao_rebenta():
     cfg = DeviceConfig(gateway_host="127.0.0.1", gateway_port=8171)
     componentes = boot(cfg)

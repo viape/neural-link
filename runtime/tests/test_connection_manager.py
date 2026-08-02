@@ -76,6 +76,53 @@ def test_backoff_nunca_ultrapassa_o_maximo():
     assert gestor.backoff_s <= 8.0
 
 
+def test_on_connected_dispara_no_arranque():
+    servidor = WebSocketTransport(port=8173)
+    servidor.connect()
+    try:
+        sm = DeviceStateMachine()
+        sm.transition_to(estados.INITIALIZING)
+        sm.transition_to(estados.CONNECTING)
+        chamadas = []
+        gestor = ConnectionManager(LinkGateway("127.0.0.1", 8173), sm,
+                                    on_connected=lambda: chamadas.append(1))
+        gestor.connect()
+        assert chamadas == [1]
+    finally:
+        servidor.disconnect()
+
+
+def test_on_connected_nao_dispara_quando_a_ligacao_falha():
+    sm = DeviceStateMachine()
+    sm.transition_to(estados.INITIALIZING)
+    sm.transition_to(estados.CONNECTING)
+    chamadas = []
+    gestor = ConnectionManager(LinkGateway("127.0.0.1", 8174), sm,
+                                on_connected=lambda: chamadas.append(1))
+    gestor.connect()
+    assert chamadas == []
+
+
+def test_on_connected_dispara_outra_vez_na_reconexao():
+    servidor = WebSocketTransport(port=8180)
+    servidor.connect()
+    try:
+        sm = DeviceStateMachine()
+        sm.transition_to(estados.INITIALIZING)
+        sm.transition_to(estados.CONNECTING)
+        chamadas = []
+        gestor = ConnectionManager(LinkGateway("127.0.0.1", 8180), sm,
+                                    on_connected=lambda: chamadas.append(1))
+        gestor.connect()
+        assert chamadas == [1]
+
+        gestor._gateway.disconnect()
+        gestor.poll()  # reconecta já nesta chamada (mesmo padrão do teste acima)
+        assert chamadas == [1, 1]
+    finally:
+        servidor.disconnect()
+
+
 def test_send_encaminha_quando_ligado():
     servidor = WebSocketTransport(port=8172, default_channel="teste")
     servidor.connect()

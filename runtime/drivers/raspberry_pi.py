@@ -23,8 +23,10 @@ from pathlib import Path
 
 from neural_audio import AudioChunk, Microphone
 
+from ...audio.playback import SpeakerPlayback
 from ..hal.interfaces import (AudioDriver, ButtonDriver, LEDDriver,
-                               NetworkDriver, StorageDriver, Updater)
+                               NetworkDriver, SpeakerDriver, StorageDriver,
+                               Updater)
 
 
 class RaspberryPiAudioDriver(AudioDriver):
@@ -54,6 +56,32 @@ class RaspberryPiAudioDriver(AudioDriver):
         if self._mic is None:
             return None
         return self._mic.read()
+
+
+class RaspberryPiSpeakerDriver(SpeakerDriver):
+    """Mesma disciplina do `RaspberryPiAudioDriver`: a construção do
+    `SpeakerPlayback` fica adiada para `start()`, nunca `__init__` —
+    embora `SpeakerPlayback` em si não abra nenhum stream ao construir
+    (só `sd.play()`/`sd.stop()` por chamada), manter o mesmo padrão dos
+    outros drivers reais evita qualquer ambiguidade futura."""
+
+    def __init__(self, *, device: int | None = None) -> None:
+        self._device = device
+        self._speaker: SpeakerPlayback | None = None
+
+    def start(self) -> None:
+        if self._speaker is not None:
+            return
+        self._speaker = SpeakerPlayback(device=self._device)
+
+    def stop(self) -> None:
+        if self._speaker is not None:
+            self._speaker.stop()
+            self._speaker = None
+
+    def play(self, wav_bytes: bytes) -> None:
+        if self._speaker is not None:
+            self._speaker.play(wav_bytes)
 
 
 class RaspberryPiNetworkDriver(NetworkDriver):

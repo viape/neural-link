@@ -12,6 +12,8 @@ uma iteração futura, fora do âmbito desta v1 ("implementações simples")."""
 
 from __future__ import annotations
 
+from typing import Callable
+
 from ..gateway.link_gateway import LinkGateway
 from . import device_state as estados
 from .lifecycle import DeviceStateMachine
@@ -25,12 +27,18 @@ class ConnectionManager:
         *,
         backoff_initial_s: float = 1.0,
         backoff_max_s: float = 60.0,
+        on_connected: Callable[[], None] | None = None,
     ) -> None:
         self._gateway = gateway
         self._sm = state_machine
         self._backoff_initial_s = backoff_initial_s
         self._backoff_max_s = backoff_max_s
         self._backoff_atual = backoff_initial_s
+        # Chamado depois de CADA transição para ONLINE — arranque E
+        # reconexão — nunca só uma vez no processo. É o que garante que
+        # o hello (handshake de capabilities) sai de novo depois de uma
+        # queda, não só no boot.
+        self._on_connected = on_connected
 
     @property
     def backoff_s(self) -> float:
@@ -46,6 +54,8 @@ class ConnectionManager:
         if self._gateway.connect():
             self._backoff_atual = self._backoff_initial_s
             self._sm.transition_to(estados.ONLINE)
+            if self._on_connected is not None:
+                self._on_connected()
             return True
         self._sm.transition_to(estados.OFFLINE)
         return False
@@ -65,6 +75,8 @@ class ConnectionManager:
         if self._gateway.connect():
             self._backoff_atual = self._backoff_initial_s
             self._sm.transition_to(estados.ONLINE)
+            if self._on_connected is not None:
+                self._on_connected()
         else:
             self._backoff_atual = min(self._backoff_atual * 2, self._backoff_max_s)
             self._sm.transition_to(estados.OFFLINE)
@@ -73,6 +85,15 @@ class ConnectionManager:
         """Encaminha já; se falhar, quem chama decide se cai na
         `OfflineQueue` — este ficheiro nunca a conhece, por desenho."""
         return self._gateway.forward(payload)
+
+    def receive(self, *, timeout_s: float = 0.05) -> dict | None:
+        """Sondagem — chamar em loop, mesmo idioma de `poll()`. `timeout_s`
+        pequeno de propósito: um bloqueio de 5s (a omissão do
+        `WebSocketClient`) travaria o loop principal de 0.5s do Runtime;
+        isto é sempre chamado quando já se sabe que há ligação."""
+        if not self.connected:
+            return None
+        return self._gateway.receive(timeout_s=timeout_s)
 
     def disconnect(self) -> None:
         self._gateway.disconnect()

@@ -25,16 +25,32 @@ def test_due_respeita_o_intervalo():
     assert hb.due() is True
 
 
-def test_payload_tem_os_8_campos():
+def test_payload_tem_os_8_campos_mais_identidade():
     hb = HeartbeatManager(version="1.2.3", state_provider=lambda: "ONLINE")
     payload = hb.beat()
     campos = payload.as_dict()
     assert set(campos) == {
         "timestamp", "temperature_c", "memory_percent", "uptime_s",
         "version", "battery_percent", "wifi_connected", "ble_connected", "state",
+        "device_id", "tenant", "token", "cpu_percent",
     }
     assert campos["version"] == "1.2.3"
     assert campos["state"] == "ONLINE"
+    # Sem identidade injetada: omissões seguras, nunca None/erro.
+    assert campos["device_id"] == ""
+    assert campos["tenant"] == ""
+    assert campos["token"] == ""
+
+
+def test_payload_leva_device_id_tenant_e_token_quando_configurados():
+    hb = HeartbeatManager(
+        version="1.0.0", device_id="pi-01", tenant="empresa_a",
+        token_provider=lambda: "segredo-atual",
+    )
+    campos = hb.beat().as_dict()
+    assert campos["device_id"] == "pi-01"
+    assert campos["tenant"] == "empresa_a"
+    assert campos["token"] == "segredo-atual"
 
 
 def test_bateria_vem_do_power_provider_injetado():
